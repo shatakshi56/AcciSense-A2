@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AcciSense Live Monitoring</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gaugeJS/dist/gauge.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d0d;color:#e0e0e0;font-family:'Segoe UI',Arial,sans-serif;min-height:100vh}
+
+/* ── HEADER ── */
+header{
+  background:linear-gradient(90deg,#0d0d0d,#1a1a2e,#0d0d0d);
+  padding:10px 20px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  border-bottom:2px solid #00e5ff33;
+  position:relative;
+}
+header h1{flex:none}
+header h1{font-size:22px;font-weight:700;color:#00e5ff;letter-spacing:2px;text-transform:uppercase}
+.dot{width:10px;height:10px;border-radius:50%;background:#00e676;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+
+/* ── MAP ── */
+#map{height:380px;width:100%;border-bottom:2px solid #00e5ff22}
+
+/* ── DASHBOARD GRID ── */
+.dashboard{
+  display:grid;
+  grid-template-columns:220px 1fr 260px;
+  gap:0;
+  min-height:calc(100vh - 430px);
+  border-top:1px solid #222;
+}
+
+/* ── RISK GAUGE PANEL ── */
+.gauge-panel{
+  background:#111827;
+  border-right:1px solid #222;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:16px 10px;gap:6px;
+}
+.gauge-panel h3{font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase}
+.gauge-wrap{position:relative;width:200px;height:120px}
+#riskGauge{width:200px;height:120px}
+.gauge-value{
+  position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+  font-size:24px;font-weight:700;color:#fff;white-space:nowrap;
+  text-shadow:0 0 12px currentColor;
+}
+.gauge-label{font-size:10px;color:#666;margin-top:2px}
+
+/* Risk badge */
+.risk-badge{
+  padding:6px 22px;border-radius:20px;font-size:14px;font-weight:700;
+  letter-spacing:2px;margin-top:4px;transition:all .3s;
+}
+.risk-SAFE  {background:#00e67622;color:#00e676;border:1px solid #00e676}
+.risk-MEDIUM{background:#ffeb3b22;color:#ffeb3b;border:1px solid #ffeb3b}
+.risk-HIGH  {background:#f4433622;color:#f44336;border:1px solid #f44336;animation:danger .6s infinite alternate}
+@keyframes danger{from{box-shadow:0 0 4px #f44336}to{box-shadow:0 0 18px #f44336}}
+
+/* ── LIVE DATA CENTER PANEL ── */
+.data-panel{
+  background:#0f1117;
+  border-right:1px solid #222;
+  padding:16px 20px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.data-panel h3{font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #222;padding-bottom:6px}
+
+.sensor-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  flex:1;
+}
+.sensor-card{
+  background:#161b22;border-radius:8px;padding:10px 12px;
+  border:1px solid #1e2a38;
+  display:flex;flex-direction:column;gap:3px;
+}
+.sensor-card .s-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.8px}
+.sensor-card .s-value{font-size:20px;font-weight:700;color:#00e5ff}
+.sensor-card .s-bar{height:4px;background:#222;border-radius:2px;margin-top:4px;overflow:hidden}
+.sensor-card .s-fill{height:100%;border-radius:2px;transition:width .5s ease}
+
+/* speed card bigger */
+.sensor-card.speed-card .s-value{font-size:28px;color:#00e5ff}
+
+/* status row */
+.status-row{
+  display:flex;gap:8px;align-items:center;justify-content:center;
+  padding:6px 0;
+  border-top:1px solid #1e2a38;
+}
+.stat-pill{
+  padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;
+}
+.road-dry  {background:#1e2a38;color:#64b5f6}
+.road-wet  {background:#1a2744;color:#42a5f5}
+.traffic-lo{background:#1e2e1e;color:#66bb6a}
+.traffic-md{background:#2e2a1e;color:#ffa726}
+.traffic-hi{background:#2e1e1e;color:#ef5350}
+.tyre-good {background:#1e2e1e;color:#66bb6a}
+.tyre-worn {background:#2e1e1e;color:#ef5350}
+
+/* ── TOP 3 CONDITIONS PANEL ── */
+.top3-panel{
+  background:#111827;
+  padding:16px 14px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.top3-panel h3{font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #222;padding-bottom:6px}
+
+.cond-card{
+  background:#161b22;border-radius:8px;padding:10px 12px;
+  border-left:3px solid #f44336;
+  position:relative;overflow:hidden;
+}
+.cond-card:nth-child(2){border-left-color:#ff9800}
+.cond-card:nth-child(3){border-left-color:#ffc107}
+
+.cond-rank{
+  position:absolute;top:8px;right:10px;
+  font-size:22px;font-weight:900;color:#ffffff0a;
+}
+.cond-name{font-size:13px;font-weight:600;color:#ccc}
+.cond-raw {font-size:11px;color:#666;margin-top:1px}
+.cond-bar-wrap{margin-top:6px;background:#222;border-radius:3px;height:6px;overflow:hidden}
+.cond-bar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.cond-card:nth-child(1) .cond-bar-fill{background:linear-gradient(90deg,#f44336,#ff6b6b)}
+.cond-card:nth-child(2) .cond-bar-fill{background:linear-gradient(90deg,#ff9800,#ffcc02)}
+.cond-card:nth-child(3) .cond-bar-fill{background:linear-gradient(90deg,#ffc107,#ffe57f)}
+.cond-pct{font-size:11px;color:#888;margin-top:3px;text-align:right}
+
+/* ── START / STOP CONTROLS ── */
+.sim-controls{display:flex;gap:6px;align-items:center;position:absolute;right:20px;top:50%;transform:translateY(-50%)}
+.btn-sim{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 13px;border-radius:20px;border:none;
+  font-size:12px;font-weight:700;letter-spacing:1px;
+  cursor:pointer;transition:all .2s;outline:none;
+}
+.btn-start{background:#00e67622;color:#00e676;border:1px solid #00e676}
+.btn-start:hover{background:#00e67644}
+.btn-stop {background:#f4433622;color:#f44336;border:1px solid #f44336}
+.btn-stop:hover {background:#f4433644}
+.btn-sim:disabled{opacity:.35;cursor:not-allowed}
+#simStatus{font-size:10px;color:#555;letter-spacing:1px;text-transform:uppercase}
+
+/* ── ALARM ── */
+#alarmBanner{
+  display:none;
+  background:#f44336;color:#fff;
+  padding:6px;text-align:center;font-weight:700;letter-spacing:2px;font-size:13px;
+  animation:danger .5s infinite alternate;
+}
+
+/* ── RESPONSIVE ── */
+@media(max-width:700px){
+  .dashboard{grid-template-columns:1fr}
+  .gauge-panel,.top3-panel{border:none;border-top:1px solid #222}
+}
+</style>
+</head>
+<body>
+
+<audio id="alarmSound" src="/static/alarm.mp3" loop></audio>
+
+<header>
+  <div class="dot" id="liveDot"></div>
+  <h1>AcciSense &nbsp;|&nbsp; Live Vehicle Monitoring</h1>
+  <div class="dot" id="liveDot2"></div>
+  <div class="sim-controls">
+    <span id="simStatus">LIVE</span>
+    <button class="btn-sim btn-stop"  id="btnStop"  onclick="stopSim()">&#9646; Stop</button>
+    <button class="btn-sim btn-start" id="btnStart" onclick="startSim()" disabled>&#9654; Start</button>
+  </div>
+</header>
+
+<div id="alarmBanner">⚠ HIGH ACCIDENT RISK DETECTED ⚠</div>
+
+<div id="map"></div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div class="dashboard">
+
+  <!-- LEFT: Risk Gauge -->
+  <div class="gauge-panel">
+    <h3>Accident Risk Meter</h3>
+    <div class="gauge-wrap">
+      <canvas id="riskGauge" width="200" height="120"></canvas>
+      <div class="gauge-value" id="riskPct">0%</div>
+    </div>
+    <div class="gauge-label">Probability of accident</div>
+    <div class="risk-badge risk-SAFE" id="riskBadge">SAFE</div>
+  </div>
+
+  <!-- CENTER: Live sensor data -->
+  <div class="data-panel">
+    <h3>Real-Time Sensor Data</h3>
+    <div class="sensor-grid">
+
+      <div class="sensor-card speed-card">
+        <span class="s-label">Speed</span>
+        <span class="s-value" id="dSpeed">0 <small style="font-size:13px;color:#555">km/h</small></span>
+        <div class="s-bar"><div class="s-fill" id="barSpeed" style="background:#00e5ff;width:0%"></div></div>
+      </div>
+
+      <div class="sensor-card">
+        <span class="s-label">Brake Pressure</span>
+        <span class="s-value" id="dBrake">0 <small style="font-size:11px;color:#555">%</small></span>
+        <div class="s-bar"><div class="s-fill" id="barBrake" style="background:#ff5252;width:0%"></div></div>
+      </div>
+
+      <div class="sensor-card">
+        <span class="s-label">Steering Angle</span>
+        <span class="s-value" id="dSteering">0 <small style="font-size:11px;color:#555">°</small></span>
+        <div class="s-bar"><div class="s-fill" id="barSteering" style="background:#aa00ff;width:0%"></div></div>
+      </div>
+
+      <div class="sensor-card">
+        <span class="s-label">Visibility</span>
+        <span class="s-value" id="dVis">0 <small style="font-size:11px;color:#555">%</small></span>
+        <div class="s-bar"><div class="s-fill" id="barVis" style="background:#00e676;width:0%"></div></div>
+      </div>
+
+    </div>
+
+    <div class="status-row">
+      <span class="stat-pill" id="pillRoad">Dry Road</span>
+      <span class="stat-pill" id="pillTraffic">Low Traffic</span>
+      <span class="stat-pill" id="pillTyre">Good Tyre</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Top 3 Conditions -->
+  <div class="top3-panel">
+    <h3>Top 3 Risk Factors</h3>
+    <div class="cond-card" id="cond1">
+      <div class="cond-rank">1</div>
+      <div class="cond-name" id="c1name">—</div>
+      <div class="cond-raw"  id="c1raw">—</div>
+      <div class="cond-bar-wrap"><div class="cond-bar-fill" id="c1bar" style="width:0%"></div></div>
+      <div class="cond-pct"  id="c1pct">0%</div>
+    </div>
+    <div class="cond-card" id="cond2">
+      <div class="cond-rank">2</div>
+      <div class="cond-name" id="c2name">—</div>
+      <div class="cond-raw"  id="c2raw">—</div>
+      <div class="cond-bar-wrap"><div class="cond-bar-fill" id="c2bar" style="width:0%"></div></div>
+      <div class="cond-pct"  id="c2pct">0%</div>
+    </div>
+    <div class="cond-card" id="cond3">
+      <div class="cond-rank">3</div>
+      <div class="cond-name" id="c3name">—</div>
+      <div class="cond-raw"  id="c3raw">—</div>
+      <div class="cond-bar-wrap"><div class="cond-bar-fill" id="c3bar" style="width:0%"></div></div>
+      <div class="cond-pct"  id="c3pct">0%</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SCRIPTS ══════════════ -->
+<script>
+
+// ═══════════════════════════════════════════
+//  MAP + CAR
+// ═══════════════════════════════════════════
+var map = L.map('map').setView([28.4595, 77.0266], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+// car using a divIcon so we can rotate it
+var carBearing = 0;
+
+function makeCarIcon(deg) {
+  return L.divIcon({
+    html: `<div style="
+            width:40px;height:40px;
+            transform:rotate(${deg}deg);
+            transform-origin:center center;
+            transition:transform 0.4s ease;
+          ">
+            <img src="https://cdn-icons-png.flaticon.com/512/744/744465.png"
+                 style="width:40px;height:40px;filter:drop-shadow(0 0 6px #00e5ff)"/>
+          </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    className: ''
+  });
+}
+
+var marker = L.marker([28.4595, 77.0266], { icon: makeCarIcon(0) }).addTo(map);
+var trail  = L.polyline([], { color: '#00e5ff', weight: 2, opacity: 0.6 }).addTo(map);
+
+var routeCoordinates = [];
+var routeIndex = 0;
+
+// ── dynamic speed state ──
+var liveSpeed    = 60;   // km/h  (updated from ML)
+var liveSteering = 0;    // degrees
+var liveBrake    = 0;    // %
+
+// ═══════════════════════════════════════════
+//  ROUTE LOADING
+// ═══════════════════════════════════════════
+async function loadRoute(startLat, startLng, endLat, endLng) {
+  try {
+    const response = await fetch("/get-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_lng: startLng, start_lat: startLat,
+                             end_lng: endLng,   end_lat: endLat })
+    });
+    if (!response.ok) { console.warn("Route error:", await response.text()); return; }
+    const data = await response.json();
+    if (!data.routes) { console.warn("No routes:", data); return; }
+    const base = decodePolyline(data.routes[0].geometry);
+    routeCoordinates = densifyRoute(base, 8000);
+    routeIndex = 0;
+    console.log("Route ready:", routeCoordinates.length, "pts");
+  } catch(e) { console.warn("Route fetch error:", e); }
+}
+
+function decodePolyline(encoded, precision) {
+  precision = precision || 5;
+  var factor = Math.pow(10, precision);
+  var index = 0, lat = 0, lng = 0, coords = [];
+  while (index < encoded.length) {
+    var b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += ((result & 1) ? ~(result >> 1) : (result >> 1));
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += ((result & 1) ? ~(result >> 1) : (result >> 1));
+    coords.push([lat / factor, lng / factor]);
+  }
+  return coords;
+}
+
+function densifyRoute(route, targetPoints) {
+  var out = [];
+  for (var i = 0; i < route.length - 1; i++) {
+    var a = route[i], b = route[i+1];
+    out.push(a);
+    var segs = Math.ceil(targetPoints / route.length);
+    for (var j = 1; j < segs; j++) {
+      out.push([a[0] + (b[0]-a[0])*(j/segs), a[1] + (b[1]-a[1])*(j/segs)]);
+    }
+  }
+  out.push(route[route.length-1]);
+  return out;
+}
+
+// ═══════════════════════════════════════════
+//  BEARING CALCULATOR
+// ═══════════════════════════════════════════
+function calcBearing(from, to) {
+  var lat1 = from[0] * Math.PI/180, lat2 = to[0] * Math.PI/180;
+  var dLng = (to[1]-from[1]) * Math.PI/180;
+  var y = Math.sin(dLng)*Math.cos(lat2);
+  var x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLng);
+  return (Math.atan2(y,x)*180/Math.PI + 360) % 360;
+}
+
+// ═══════════════════════════════════════════
+//  MOVE VEHICLE  ← speed-driven dynamic loop
+// ═══════════════════════════════════════════
+var moveTimer = null;
+
+function scheduleMove() {
+  if (moveTimer) clearTimeout(moveTimer);
+
+  // effective speed: brake reduces it
+  var effectiveSpeed = liveSpeed * (1 - Math.max(0, liveBrake - 30) / 200);
+  effectiveSpeed = Math.max(10, effectiveSpeed);
+
+  // interval: speed 20→800ms, speed 140→80ms
+  var interval = Math.max(80, 820 - effectiveSpeed * 5.3);
+
+  // advance multiple points when speed is high so car visually moves faster
+  var stepsPerTick = Math.max(1, Math.round(effectiveSpeed / 25));
+
+  moveTimer = setTimeout(function() {
+    if (!simRunning) return;
+    moveVehicle(stepsPerTick);
+    scheduleMove();
+  }, interval);
+}
+
+function moveVehicle(steps) {
+  if (routeCoordinates.length === 0) return;
+  if (routeIndex >= routeCoordinates.length) {
+    // loop route
+    routeIndex = 0;
+    trail.setLatLngs([]);
+    return;
+  }
+
+  steps = steps || 1;
+  routeIndex = Math.min(routeIndex + steps, routeCoordinates.length - 1);
+
+  var pos  = routeCoordinates[routeIndex];
+  var next = routeCoordinates[Math.min(routeIndex+1, routeCoordinates.length-1)];
+
+  // bearing from route + subtle steering nudge
+  var bearing = calcBearing(pos, next);
+  var steerNudge = (liveSteering / 40) * 12;  // max ±12° visual offset
+  carBearing = bearing + steerNudge;
+
+  marker.setLatLng(pos);
+  marker.setIcon(makeCarIcon(carBearing));
+  map.panTo(pos, { animate: true, duration: 0.2 });
+  trail.addLatLng(pos);
+}
+
+// ═══════════════════════════════════════════
+//  RISK GAUGE  (fixed pointer — piecewise zones)
+//  Correct init order for gaugeJS:
+//  1. setOptions  2. maxValue  3. setMinValue  4. animationSpeed  5. set()
+// ═══════════════════════════════════════════
+var riskGaugeEl = document.getElementById('riskGauge');
+var riskGauge = new Gauge(riskGaugeEl).setOptions({
+  angle: 0.12,
+  lineWidth: 0.42,
+  radiusScale: 0.97,
+  pointer: {
+    length: 0.60,
+    strokeWidth: 0.045,
+    color: '#EEEEEE'
+  },
+  limitMax: false,
+  limitMin: false,
+  generateGradient: false,
+  highDpiSupport: true,
+  staticZones: [
+    { strokeStyle: "#00e676", min: 0,  max: 33  },   // GREEN  = SAFE
+    { strokeStyle: "#ffeb3b", min: 33, max: 66  },   // YELLOW = MEDIUM
+    { strokeStyle: "#f44336", min: 66, max: 100 }    // RED    = HIGH
+  ],
+  staticLabels: {
+    font: "10px Arial",
+    labels: [0, 33, 66, 100],
+    color: "#999999",
+    fractionDigits: 0
+  }
+});
+riskGauge.maxValue = 100;
+riskGauge.setMinValue(0);
+riskGauge.animationSpeed = 28;
+riskGauge.set(1);   // start just above 0 so pointer is visible immediately
+
+// ═══════════════════════════════════════════
+//  SENSOR DATA GENERATOR
+//  Factors are correlated with speed so visual sim is consistent:
+//   - high speed  → more brake, sharper steering, lower visibility,
+//                   more traffic, higher tyre-wear chance
+//   - braking hard → speed drops on next tick
+// ═══════════════════════════════════════════
+var currentSpeed = 60;
+var lastBrake    = 0;
+
+function generateSensorData() {
+  // apply last tick's braking to this tick's speed
+  var brakeEffect = Math.max(0, lastBrake - 30) * 0.35; // heavy brake → speed drops
+  currentSpeed -= brakeEffect * 0.1;
+
+  // random speed drift, biased by current speed (slight regression to mean)
+  var drift = (Math.random() * 28 - 14) - (currentSpeed - 70) * 0.05;
+  currentSpeed = Math.max(20, Math.min(135, currentSpeed + drift));
+
+  var spd = currentSpeed;
+  var sf  = spd / 135;   // 0–1 speed factor
+
+  // ── brake: at high speed there's more emergency braking ──
+  var brake = Math.random() * 50 + sf * 35;     // 0-50 base + up to 35 at max speed
+  brake = Math.min(100, brake);
+  lastBrake = brake;
+
+  // ── steering: more erratic at higher speed ──
+  var steerMax = 10 + sf * 30;                  // ±10° at low speed, ±40° at high
+  var steering = (Math.random() * 2 - 1) * steerMax;
+
+  // ── road: wetter at higher speed (highway rain exposure) ──
+  var road = Math.random() < (0.15 + sf * 0.35) ? 1 : 0;
+
+  // ── traffic: more likely on fast roads ──
+  var trafficRand = Math.random();
+  var traffic;
+  if (sf > 0.7)       traffic = trafficRand < 0.4 ? 2 : trafficRand < 0.75 ? 1 : 0;
+  else if (sf > 0.4)  traffic = trafficRand < 0.25 ? 2 : trafficRand < 0.60 ? 1 : 0;
+  else                traffic = trafficRand < 0.10 ? 2 : trafficRand < 0.35 ? 1 : 0;
+
+  // ── visibility: worse at high speed (rain/glare/night) ──
+  var visBase = 90 - sf * 35;                   // 90% at 20 km/h → 55% at 135 km/h
+  var visibility = Math.max(30, Math.min(100, visBase + (Math.random() * 30 - 15)));
+
+  // ── tyre: worn tyres more likely at high speed (heat, age) ──
+  var tyre = Math.random() < (0.08 + sf * 0.22) ? 1 : 0;
+
+  return {
+    speed:      Math.round(spd),
+    brake:      Math.round(brake),
+    steering:   Math.round(steering),
+    road:       road,
+    traffic:    traffic,
+    visibility: Math.round(visibility),
+    tyre:       tyre
+  };
+}
+
+// ═══════════════════════════════════════════
+//  UI UPDATERS
+// ═══════════════════════════════════════════
+function updateSensorUI(d) {
+  // speed
+  document.getElementById('dSpeed').innerHTML    = `${d.speed} <small style="font-size:13px;color:#555">km/h</small>`;
+  document.getElementById('barSpeed').style.width = `${(d.speed/140)*100}%`;
+
+  // brake
+  document.getElementById('dBrake').innerHTML    = `${Math.round(d.brake)} <small style="font-size:11px;color:#555">%</small>`;
+  document.getElementById('barBrake').style.width = `${d.brake}%`;
+
+  // steering (0–100 mapped from -40..40)
+  var steerPct = ((Math.abs(d.steering)/40)*100);
+  document.getElementById('dSteering').innerHTML     = `${d.steering} <small style="font-size:11px;color:#555">°</small>`;
+  document.getElementById('barSteering').style.width = `${steerPct}%`;
+
+  // visibility
+  document.getElementById('dVis').innerHTML    = `${Math.round(d.visibility)} <small style="font-size:11px;color:#555">%</small>`;
+  document.getElementById('barVis').style.width = `${d.visibility}%`;
+
+  // pills
+  var pillRoad    = document.getElementById('pillRoad');
+  var pillTraffic = document.getElementById('pillTraffic');
+  var pillTyre    = document.getElementById('pillTyre');
+
+  pillRoad.textContent    = d.road === 1 ? 'Wet Road' : 'Dry Road';
+  pillRoad.className      = 'stat-pill ' + (d.road === 1 ? 'road-wet' : 'road-dry');
+
+  var tLabels = ['Low Traffic','Medium Traffic','High Traffic'];
+  var tClasses= ['traffic-lo','traffic-md','traffic-hi'];
+  pillTraffic.textContent = tLabels[d.traffic];
+  pillTraffic.className   = 'stat-pill ' + tClasses[d.traffic];
+
+  pillTyre.textContent    = d.tyre === 1 ? 'Worn Tyre' : 'Good Tyre';
+  pillTyre.className      = 'stat-pill ' + (d.tyre === 1 ? 'tyre-worn' : 'tyre-good');
+}
+
+function updateTop3(top3) {
+  var ids = [['c1name','c1raw','c1bar','c1pct'],
+             ['c2name','c2raw','c2bar','c2pct'],
+             ['c3name','c3raw','c3bar','c3pct']];
+
+  // Each factor's max contribution to the 7.8 total
+  var maxPct = { Speed:12.8, Brake:12.8, Steering:12.8, Road:15.4,
+                 Traffic:20.5, Visibility:12.8, Tyre:12.8 };
+
+  top3.forEach(function(c, i) {
+    var row = ids[i];
+    document.getElementById(row[0]).textContent = c.name;
+    document.getElementById(row[1]).textContent = c.raw;
+    // bar width relative to that factor's own max possible contribution
+    var relPct = Math.min(100, (c.pct / (maxPct[c.name] || 15)) * 100);
+    document.getElementById(row[2]).style.width = relPct + '%';
+    document.getElementById(row[3]).textContent = c.pct.toFixed(1) + '% risk contribution';
+  });
+}
+
+function updateRiskUI(risk, prob) {
+  // gauge pointer
+  riskGauge.set(prob);
+  document.getElementById('riskPct').textContent = prob.toFixed(0) + '%';
+
+  var badge = document.getElementById('riskBadge');
+  badge.textContent  = risk;
+  badge.className    = 'risk-badge risk-' + risk;
+
+  var alarm  = document.getElementById('alarmSound');
+  var banner = document.getElementById('alarmBanner');
+  if (risk === 'HIGH') {
+    banner.style.display = 'block';
+    if (alarm.paused) alarm.play().catch(function(){});
+  } else {
+    banner.style.display = 'none';
+    alarm.pause(); alarm.currentTime = 0;
+  }
+}
+
+// ═══════════════════════════════════════════
+//  ML PREDICTION LOOP
+// ═══════════════════════════════════════════
+async function updateML() {
+  var data = generateSensorData();
+  try {
+    var res  = await fetch("/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    var r = await res.json();
+    if (r.error) { console.warn("Predict error:", r.error); return; }
+
+    // update live motion state
+    liveSpeed    = r.speed;
+    liveSteering = r.steering;
+    liveBrake    = r.brake;
+
+    // update UI
+    updateSensorUI(r);
+    updateRiskUI(r.risk, r.risk_probability);
+    updateTop3(r.top_conditions);
+
+  } catch(e) { console.warn("ML fetch error:", e); }
+}
+
+// ═══════════════════════════════════════════
+//  START / STOP CONTROL
+// ═══════════════════════════════════════════
+var mlInterval  = null;
+var simRunning  = false;
+
+function startSim() {
+  if (simRunning) return;
+  simRunning = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled  = false;
+  document.getElementById('simStatus').textContent = 'LIVE';
+  document.getElementById('simStatus').style.color = '#00e676';
+  document.getElementById('liveDot').style.animationPlayState  = 'running';
+  document.getElementById('liveDot2').style.animationPlayState = 'running';
+  scheduleMove();
+  mlInterval = setInterval(updateML, 2000);
+  updateML();   // immediate first call
+}
+
+function stopSim() {
+  if (!simRunning) return;
+  simRunning = false;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('simStatus').textContent = 'PAUSED';
+  document.getElementById('simStatus').style.color = '#f44336';
+  document.getElementById('liveDot').style.animationPlayState  = 'paused';
+  document.getElementById('liveDot2').style.animationPlayState = 'paused';
+  // stop movement
+  if (moveTimer) { clearTimeout(moveTimer); moveTimer = null; }
+  // stop ML loop
+  if (mlInterval) { clearInterval(mlInterval); mlInterval = null; }
+  // stop alarm
+  var alarm = document.getElementById('alarmSound');
+  alarm.pause(); alarm.currentTime = 0;
+  document.getElementById('alarmBanner').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════
+loadRoute(28.4595, 77.0266, 28.5200, 77.0900);
+startSim();   // auto-start on page load
+
+</script>
+</body>
+</html>
